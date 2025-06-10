@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Quiz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for better look and feel */
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease;
+        }
+        .quiz-container {
+            max-width: 600px;
+            min-height: 400px; /* Ensure a minimum height */
+        }
+        .option-button {
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .option-button:hover {
+            transform: translateY(-2px);
+        }
+        .option-button.selected {
+            background-color: #3b82f6; /* Tailwind's blue-500 */
+            color: white;
+            border-color: #2563eb; /* Tailwind's blue-600 */
+        }
+        .results-bar-container {
+            background-color: #e5e7eb; /* Tailwind's gray-200 */
+            border-radius: 0.375rem; /* rounded-md */
+            overflow: hidden;
+            height: 24px; /* h-6 */
+            margin-top: 4px; /* mt-1 */
+        }
+        .results-bar {
+            background-color: #60a5fa; /* Tailwind's blue-400 */
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px; /* pr-2 */
+            color: white;
+            font-size: 0.75rem; /* text-xs */
+            transition: width 0.5s ease-in-out;
+        }
+        .action-button {
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .action-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        .action-button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        /* Custom font for a slightly more playful feel if desired, otherwise Inter is good */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 to-slate-700 flex flex-col items-center justify-center min-h-screen p-4 text-gray-100">
+
+    <div id="quizApp" class="quiz-container bg-slate-800 shadow-2xl rounded-xl p-6 md:p-8 w-full flex flex-col justify-between">
+        
+        <div> <h1 id="mainTitle" class="text-3xl md:text-4xl font-bold text-center mb-6 text-sky-400">Interactive Quiz</h1>
+
+            <div id="questionArea" class="mb-6">
+                <h2 id="questionText" class="text-xl md:text-2xl font-semibold mb-2 text-gray-100"></h2>
+                <p id="questionNumber" class="text-sm text-sky-500 mb-4"></p>
+                <div id="optionsContainer" class="space-y-3">
+                    </div>
+            </div>
+
+            <div id="resultsArea" class="hidden">
+                <h2 class="text-2xl font-bold mb-6 text-center text-sky-400">Quiz Results</h2>
+                <div id="resultsContent" class="space-y-6">
+                    </div>
+            </div>
+
+            <div id="messageArea" class="text-center text-lg text-amber-400 my-4"></div>
+        </div>
+
+        <div id="controlsArea" class="mt-auto pt-6 border-t border-slate-700">
+            <button id="submitVoteButton" class="action-button w-full bg-sky-500 hover:bg-sky-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75">
+                Submit Vote
+            </button>
+            <button id="showResultsButton" class="action-button w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hidden mt-4 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-opacity-75">
+                Show Final Results
+            </button>
+            <button id="restartQuizButton" class="action-button w-full bg-rose-500 hover:bg-rose-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hidden mt-4 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-opacity-75">
+                Restart Quiz
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Quiz Data ---
+        const quizData = [
+            {
+                id: 1,
+                question: "What is the capital of France?",
+                options: ["Berlin", "Madrid", "Paris", "Rome"],
+                votes: [0, 0, 0, 0], // To store votes for each option
+                correctAnswerIndex: 2 // Optional: if you want to show correct answers later
+            },
+            {
+                id: 2,
+                question: "Which planet is known as the Red Planet?",
+                options: ["Earth", "Mars", "Jupiter", "Venus"],
+                votes: [0, 0, 0, 0],
+                correctAnswerIndex: 1
+            },
+            {
+                id: 3,
+                question: "What is 2 + 2 * 2?",
+                options: ["4", "6", "8", "2"],
+                votes: [0, 0, 0, 0],
+                correctAnswerIndex: 1 // 2 + (2*2) = 2 + 4 = 6
+            }
+        ];
+
+        // --- DOM Elements ---
+        const mainTitleElement = document.getElementById('mainTitle');
+        const questionAreaElement = document.getElementById('questionArea');
+        const questionTextElement = document.getElementById('questionText');
+        const questionNumberElement = document.getElementById('questionNumber');
+        const optionsContainerElement = document.getElementById('optionsContainer');
+        
+        const resultsAreaElement = document.getElementById('resultsArea');
+        const resultsContentElement = document.getElementById('resultsContent');
+        
+        const messageAreaElement = document.getElementById('messageArea');
+        
+        const submitVoteButton = document.getElementById('submitVoteButton');
+        const showResultsButton = document.getElementById('showResultsButton');
+        const restartQuizButton = document.getElementById('restartQuizButton');
+
+        // --- Quiz State ---
+        let currentQuestionIndex = 0;
+        let selectedOptionIndex = null; // Stores the index of the currently selected option for the current question
+
+        // --- Functions ---
+
+        /**
+         * Displays the current question and its options.
+         */
+        function displayQuestion() {
+            // Clear any previous messages
+            messageAreaElement.textContent = '';
+            messageAreaElement.classList.add('hidden');
+
+            if (currentQuestionIndex < quizData.length) {
+                const currentQuestion = quizData[currentQuestionIndex];
+                questionTextElement.textContent = currentQuestion.question;
+                questionNumberElement.textContent = `Question ${currentQuestionIndex + 1} of ${quizData.length}`;
+                optionsContainerElement.innerHTML = ''; // Clear previous options
+
+                currentQuestion.options.forEach((option, index) => {
+                    const button = document.createElement('button');
+                    button.textContent = option;
+                    button.classList.add('option-button', 'w-full', 'text-left', 'p-3', 'border-2', 'border-slate-600', 'rounded-lg', 'hover:bg-slate-700', 'focus:outline-none', 'focus:ring-2', 'focus:ring-sky-500', 'focus:ring-opacity-75', 'text-gray-200');
+                    button.dataset.optionIndex = index;
+                    button.addEventListener('click', handleOptionSelect);
+                    optionsContainerElement.appendChild(button);
+                });
+
+                // Reset selection and button state
+                selectedOptionIndex = null;
+                submitVoteButton.disabled = true;
+                submitVoteButton.classList.remove('bg-green-500', 'hover:bg-green-600');
+                submitVoteButton.classList.add('bg-sky-500', 'hover:bg-sky-600');
+                submitVoteButton.textContent = 'Submit Vote';
+
+                questionAreaElement.classList.remove('hidden');
+                resultsAreaElement.classList.add('hidden');
+                submitVoteButton.classList.remove('hidden');
+                showResultsButton.classList.add('hidden');
+                restartQuizButton.classList.add('hidden');
+                mainTitleElement.textContent = "Interactive Quiz";
+
+            } else {
+                // All questions answered
+                questionAreaElement.classList.add('hidden');
+                submitVoteButton.classList.add('hidden');
+                showResultsButton.classList.remove('hidden');
+                messageAreaElement.textContent = 'Quiz complete! Click "Show Final Results" to see the summary.';
+                messageAreaElement.classList.remove('hidden');
+                mainTitleElement.textContent = "Quiz Finished!";
+            }
+        }
+
+        /**
+         * Handles the selection of an answer option.
+         * @param {Event} event - The click event from the option button.
+         */
+        function handleOptionSelect(event) {
+            // Remove 'selected' class from previously selected button (if any)
+            const previouslySelectedButton = optionsContainerElement.querySelector('.option-button.selected');
+            if (previouslySelectedButton) {
+                previouslySelectedButton.classList.remove('selected');
+                previouslySelectedButton.classList.add('border-slate-600', 'hover:bg-slate-700');
+                previouslySelectedButton.classList.remove('bg-sky-500', 'text-white', 'border-sky-600');
+
+            }
+
+            // Add 'selected' class to the clicked button
+            selectedOptionIndex = parseInt(event.target.dataset.optionIndex);
+            event.target.classList.add('selected');
+            event.target.classList.remove('border-slate-600', 'hover:bg-slate-700');
+            event.target.classList.add('bg-sky-500', 'text-white', 'border-sky-600');
+
+
+            submitVoteButton.disabled = false; // Enable submit button
+        }
+
+        /**
+         * Submits the vote for the current question and moves to the next.
+         */
+        function handleSubmitVote() {
+            if (selectedOptionIndex !== null) {
+                quizData[currentQuestionIndex].votes[selectedOptionIndex]++;
+                currentQuestionIndex++;
+                displayQuestion(); // Display next question or completion message
+            } else {
+                messageAreaElement.textContent = 'Please select an option before submitting.';
+                messageAreaElement.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Displays the aggregated results of the quiz.
+         */
+        function displayResults() {
+            questionAreaElement.classList.add('hidden');
+            resultsAreaElement.classList.remove('hidden');
+            submitVoteButton.classList.add('hidden');
+            showResultsButton.classList.add('hidden');
+            restartQuizButton.classList.remove('hidden');
+            messageAreaElement.classList.add('hidden'); // Hide any pending messages
+            mainTitleElement.textContent = "Quiz Results";
+
+
+            resultsContentElement.innerHTML = ''; // Clear previous results
+
+            quizData.forEach((questionData, qIndex) => {
+                const questionResultDiv = document.createElement('div');
+                questionResultDiv.classList.add('p-4', 'bg-slate-700', 'rounded-lg', 'shadow');
+
+                const questionTitle = document.createElement('h3');
+                questionTitle.textContent = `Q${qIndex + 1}: ${questionData.question}`;
+                questionTitle.classList.add('text-lg', 'font-semibold', 'mb-3', 'text-sky-300');
+                questionResultDiv.appendChild(questionTitle);
+
+                const totalVotesForQuestion = questionData.votes.reduce((sum, count) => sum + count, 0);
+
+                questionData.options.forEach((option, oIndex) => {
+                    const optionResultDiv = document.createElement('div');
+                    optionResultDiv.classList.add('mb-2');
+
+                    const voteCount = questionData.votes[oIndex];
+                    const percentage = totalVotesForQuestion > 0 ? ((voteCount / totalVotesForQuestion) * 100).toFixed(1) : 0;
+
+                    const optionText = document.createElement('p');
+                    optionText.textContent = `${option}: ${voteCount} vote(s) (${percentage}%)`;
+                    optionText.classList.add('text-sm', 'text-gray-300');
+                    optionResultDiv.appendChild(optionText);
+                    
+                    // Visual bar for votes
+                    const barContainer = document.createElement('div');
+                    barContainer.classList.add('results-bar-container', 'w-full');
+                    
+                    const bar = document.createElement('div');
+                    bar.classList.add('results-bar');
+                    bar.style.width = `${percentage}%`;
+                    bar.textContent = `${percentage}%`; // Show percentage inside the bar if there's space
+                    if (parseFloat(percentage) < 10) { // If bar is too small, don't show text inside
+                        bar.textContent = ''; 
+                        // Or you could append the percentage next to the bar if it's too small
+                    }
+
+                    barContainer.appendChild(bar);
+                    optionResultDiv.appendChild(barContainer);
+
+                    questionResultDiv.appendChild(optionResultDiv);
+                });
+                resultsContentElement.appendChild(questionResultDiv);
+            });
+        }
+
+        /**
+         * Resets the quiz to its initial state.
+         */
+        function handleRestartQuiz() {
+            currentQuestionIndex = 0;
+            selectedOptionIndex = null;
+            quizData.forEach(q => q.votes = q.options.map(() => 0)); // Reset all votes to 0
+
+            resultsAreaElement.classList.add('hidden');
+            restartQuizButton.classList.add('hidden');
+            submitVoteButton.classList.remove('hidden');
+            
+            displayQuestion(); // Start from the first question
+        }
+
+        // --- Event Listeners ---
+        submitVoteButton.addEventListener('click', handleSubmitVote);
+        showResultsButton.addEventListener('click', displayResults);
+        restartQuizButton.addEventListener('click', handleRestartQuiz);
+
+        // --- Initial Load ---
+        displayQuestion(); // Display the first question on page load
+
+    </script>
+</body>
+</html>
